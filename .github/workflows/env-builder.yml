@@ -1,0 +1,40 @@
+name: Environment Builder
+
+on:
+  workflow_call:
+    inputs:
+      region:
+        required: true
+        type: string
+    outputs:
+      environment:
+        description: "Resolved environment"
+        value: ${{ jobs.resolve.outputs.environment }}
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+
+    outputs:
+      environment: ${{ steps.set-env.outputs.environment }}
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Install yq
+        run: |
+          sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq
+          sudo chmod +x /usr/bin/yq
+
+      - name: Resolve environment
+        id: set-env
+        run: |
+          ENV=$(yq e ".regions.\"${{ inputs.region }}\".environment" .github/.aws/environments.yml)
+
+          if [ "$ENV" == "null" ] || [ -z "$ENV" ]; then
+            echo "Invalid region mapping"
+            exit 1
+          fi
+
+          echo "environment=$ENV" >> $GITHUB_OUTPUT
