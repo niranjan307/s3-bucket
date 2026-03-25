@@ -35,13 +35,20 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.x"
+          python-version: "3.12"
 
       - name: Install cfn-lint
         run: pip install cfn-lint
 
       - name: Lint template
         run: cfn-lint cloudformation/template.yml
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
 
       - name: Validate template
         run: |
@@ -51,7 +58,7 @@ jobs:
       - name: Validate required parameters
         run: |
           if ! grep -q "AccessRoleArn" cloudformation/template.yml; then
-            echo "❌ Missing AccessRoleArn parameter"
+            echo "Missing AccessRoleArn parameter"
             exit 1
           fi
 
@@ -75,14 +82,14 @@ jobs:
       - name: Ensure CI success
         run: |
           if [ "${{ needs.ci.outputs.ci_status }}" != "success" ]; then
-            echo " CI failed. Cannot release."
+            echo "CI failed. Cannot release."
             exit 1
           fi
 
       - name: Check if tag exists
         run: |
           if git rev-parse "${{ inputs.tag }}" >/dev/null 2>&1; then
-            echo " Tag already exists"
+            echo "Tag already exists"
             exit 1
           fi
 
