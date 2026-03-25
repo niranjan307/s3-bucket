@@ -14,7 +14,7 @@ Resources:
   MyS3Bucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub "${AWS::Region}-my-s3-bucket-${Environment}"
+      BucketName: !Sub "my-s3-bucket-${AWS::Region}-${AWS::AccountId}"
 
       VersioningConfiguration:
         Status: Enabled

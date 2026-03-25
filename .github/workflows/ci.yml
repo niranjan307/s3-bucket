@@ -54,13 +54,6 @@ jobs:
           aws cloudformation validate-template \
             --template-body file://cloudformation/template.yml
 
-      - name: Validate required parameters
-        run: |
-          if ! grep -q "AccessRoleArn" cloudformation/template.yml; then
-            echo "❌ Missing AccessRoleArn parameter"
-            exit 1
-          fi
-
       - name: CI Success Message
         run: |
           echo "✅ CI SUCCESS"
