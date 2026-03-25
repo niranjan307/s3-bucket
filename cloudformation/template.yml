@@ -24,7 +24,7 @@ Resources:
     UpdateReplacePolicy: Retain
 
     Properties:
-      BucketName: !Sub "${AWS::AccountId}-${AWS::Region}-my-s3-bucket-${Environment}"
+      BucketName: !Sub "my-s3-bucket-${AWS::Region}-${AWS::AccountId}"
 
       OwnershipControls:
         Rules:
