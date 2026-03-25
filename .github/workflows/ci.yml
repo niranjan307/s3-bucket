@@ -1,0 +1,107 @@
+name: CI + Release (S3 CloudFormation)
+
+on:
+  push:
+    branches:
+      - main
+      - feature/*
+
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: "Create release? (true/false)"
+        required: true
+        default: "false"
+      tag:
+        description: "Release tag (e.g. v1.0.0)"
+        required: false
+      branch:
+        description: "Branch to release from"
+        default: "main"
+        required: false
+
+jobs:
+
+  ci:
+    runs-on: ubuntu-latest
+
+    outputs:
+      ci_status: ${{ steps.status.outputs.result }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install cfn-lint
+        run: pip install cfn-lint
+
+      - name: Lint template
+        run: cfn-lint cloudformation/template.yml
+
+      - name: Validate template
+        run: |
+          aws cloudformation validate-template \
+            --template-body file://cloudformation/template.yml
+
+      - name: Validate required parameters
+        run: |
+          if ! grep -q "AccessRoleArn" cloudformation/template.yml; then
+            echo "❌ Missing AccessRoleArn parameter"
+            exit 1
+          fi
+
+      - name: Set CI status
+        id: status
+        run: echo "result=success" >> $GITHUB_OUTPUT
+
+
+  release:
+    runs-on: ubuntu-latest
+    needs: ci
+
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.create_release == 'true' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+
+      - name: Ensure CI success
+        run: |
+          if [ "${{ needs.ci.outputs.ci_status }}" != "success" ]; then
+            echo " CI failed. Cannot release."
+            exit 1
+          fi
+
+      - name: Check if tag exists
+        run: |
+          if git rev-parse "${{ inputs.tag }}" >/dev/null 2>&1; then
+            echo " Tag already exists"
+            exit 1
+          fi
+
+      - name: Create tag
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+
+          git tag ${{ inputs.tag }}
+          git push origin ${{ inputs.tag }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag }}
+          name: Release ${{ inputs.tag }}
+          generate_release_notes: true
+
+      - name: Upload template to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: cloudformation/template.yml

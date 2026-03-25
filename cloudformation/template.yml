@@ -1,5 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: s3-bucket CloudFormation Template
+Description: >
+  Secure S3 bucket with fine-grained IAM access controls for read/write operations.
+  Designed for Lambda and service-based access.
 
 Parameters:
   Environment:
@@ -7,13 +9,26 @@ Parameters:
     AllowedValues:
       - dev
       - qa
-      - test
+      - prod
+
+  # IAM Role ARN that will be granted access (e.g., Lambda role)
+  AccessRoleArn:
+    Type: String
+    Description: ARN of IAM Role (e.g., Lambda execution role) that needs S3 access
 
 Resources:
+
   MyS3Bucket:
     Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+
     Properties:
-      BucketName: !Sub "${AWS::Region}-my-s3-bucket-${Environment}"
+      BucketName: !Sub "${AWS::AccountId}-${AWS::Region}-my-s3-bucket-${Environment}"
+
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
 
       VersioningConfiguration:
         Status: Enabled
@@ -24,6 +39,12 @@ Resources:
         BlockPublicPolicy: true
         RestrictPublicBuckets: true
 
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: alias/aws/s3
+
       LifecycleConfiguration:
         Rules:
           - Id: TransitionRule
@@ -31,7 +52,7 @@ Resources:
             Transitions:
               - StorageClass: STANDARD_IA
                 TransitionInDays: 30
-              - StorageClass: GLACIER
+              - StorageClass: GLACIER_IR
                 TransitionInDays: 60
             ExpirationInDays: 365
 
@@ -40,18 +61,11 @@ Resources:
             NoncurrentVersionExpiration:
               NoncurrentDays: 90
 
-      BucketEncryption:
-        ServerSideEncryptionConfiguration:
-          - ServerSideEncryptionByDefault:
-              SSEAlgorithm: AES256
-
       Tags:
         - Key: Environment
           Value: !Ref Environment
 
-        - Key: Name
-          Value: !Sub "${AWS::Region}-my-s3-bucket-${Environment}"
-
+  # Bucket Policy with Fine-Grained Access
   MyS3BucketPolicy:
     Type: AWS::S3::BucketPolicy
     Properties:
@@ -59,6 +73,8 @@ Resources:
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
+
+          # Enforce HTTPS
           - Sid: EnforceSSL
             Effect: Deny
             Principal: "*"
@@ -70,20 +86,49 @@ Resources:
               Bool:
                 aws:SecureTransport: false
 
-          - Sid: AllowAccountAccess
+          # READ ACCESS (GetObject)
+          - Sid: AllowReadAccess
             Effect: Allow
             Principal:
-              AWS: !Sub "arn:aws:iam::${AWS::AccountId}:root"
-            Action: "s3:*"
+              AWS: !Ref AccessRoleArn
+            Action:
+              - s3:GetObject
+            Resource:
+              - !Sub "${MyS3Bucket.Arn}/*"
+
+          # WRITE ACCESS (PutObject)
+          - Sid: AllowWriteAccess
+            Effect: Allow
+            Principal:
+              AWS: !Ref AccessRoleArn
+            Action:
+              - s3:PutObject
+            Resource:
+              - !Sub "${MyS3Bucket.Arn}/*"
+
+          # LIST ACCESS (ListBucket required for many SDK ops)
+          - Sid: AllowListAccess
+            Effect: Allow
+            Principal:
+              AWS: !Ref AccessRoleArn
+            Action:
+              - s3:ListBucket
             Resource:
               - !Sub "${MyS3Bucket.Arn}"
+
+          # 🧹 OPTIONAL DELETE ACCESS (enable if needed)
+          - Sid: AllowDeleteAccess
+            Effect: Allow
+            Principal:
+              AWS: !Ref AccessRoleArn
+            Action:
+              - s3:DeleteObject
+            Resource:
               - !Sub "${MyS3Bucket.Arn}/*"
 
 Outputs:
   S3BucketName:
-    Description: Bucket Name
     Value: !Ref MyS3Bucket
 
   S3BucketArn:
-    Description: Bucket ARN
     Value: !GetAtt MyS3Bucket.Arn

@@ -1,19 +1,22 @@
-
 name: Deploy CloudFormation Stack
 
 on:
   workflow_dispatch:
     inputs:
       region:
-        description: "Enter AWS Region (must exist in environments.yml)"
+        description: "Enter AWS Region"
         required: true
-        type: string
+        type: choice
+        options:
+          - us-east-1
+          - us-west-2
+          - eu-west-1
 
 jobs:
   resolve-env:
     uses: ./.github/workflows/env-builder.yml
     with:
-      region: ${{ github.event.inputs.region }}
+      region: ${{ inputs.region }}
 
   deploy:
     runs-on: ubuntu-latest
@@ -21,22 +24,25 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v2
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ github.event.inputs.region }}
+          aws-region: ${{ inputs.region }}
 
       - name: Deploy CloudFormation Stack
+        env:
+          ENV: ${{ needs.resolve-env.outputs.environment }}
+          REGION: ${{ inputs.region }}
         run: |
-          ENV="${{ needs.resolve-env.outputs.environment }}"
+          echo "Deploying to environment: $ENV in region: $REGION"
 
           aws cloudformation deploy \
             --template-file cloudformation/template.yml \
             --stack-name my-s3-bucket-stack-$ENV \
             --parameter-overrides Environment=$ENV \
             --capabilities CAPABILITY_NAMED_IAM \
-            --region ${{ github.event.inputs.region }}
+            --region $REGION
