@@ -1,3 +1,4 @@
+
 name: Deploy CloudFormation Stack
 
 on:
@@ -34,7 +35,7 @@ jobs:
           ENV="${{ needs.resolve-env.outputs.environment }}"
 
           aws cloudformation deploy \
-            --template-file templates/create-s3-bucket.yml \
+            --template-file cloudformation/template.yml \
             --stack-name my-s3-bucket-stack-$ENV \
             --parameter-overrides Environment=$ENV \
             --capabilities CAPABILITY_NAMED_IAM \
